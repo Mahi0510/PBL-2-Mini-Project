@@ -239,12 +239,7 @@ for the academic curriculum of
 ---
 
 ## Developed By
+Mahika Morolia
 
-### Group Members
-
-1. Mahika Morolia
-2. Krinjal Mewara
-3. Jiya Joshi
-4. Pranav Rathi
 
 ---
