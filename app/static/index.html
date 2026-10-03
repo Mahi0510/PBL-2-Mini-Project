@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>RecruitAI | Enterprise ATS</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TITAN ATS | HR Portal</title>
+    <script src="/static/vendor/chart.umd.js"></script>
     <style>
         :root { --p: #2563eb; --bg: #f4f7fb; --nav: #0f172a; --border: #e2e8f0; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); margin: 0; display: flex; height: 100vh; overflow: hidden; }
@@ -46,6 +47,10 @@
         .view-section { display: none; }
         .view-section.active { display: block; }
         .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .table-wrap { overflow-x: auto; }
+        .notice { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; border-radius: 10px; padding: 10px 14px; font-size: 12px; margin-bottom: 18px; }
+        .form-row input, .form-row textarea { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px; box-sizing: border-box; font-family: inherit; font-size: 14px; margin-bottom: 10px; }
+        @media (max-width: 900px) { .sidebar { width: 190px; padding: 25px 14px; } .main { padding: 20px; } .chart-grid { grid-template-columns: 1fr; } .drawer { width: 100%; right: -100%; } .filter-bar { flex-wrap: wrap; } }
     </style>
 </head>
 <body>
@@ -53,26 +58,27 @@
     <div id="loginOverlay">
         <div class="login-card">
             <h2 style="color: var(--p); margin-top: 0;">HR Portal</h2>
-            <p style="color: grey; font-size: 13px; margin-bottom: 20px;">Credentials: admin / admin123</p>
-            <input type="text" id="username" placeholder="Username (admin)">
-            <input type="password" id="password" placeholder="Password (admin123)">
+            <p style="color: grey; font-size: 13px; margin-bottom: 20px;">Authorised HR staff only</p>
+            <input type="text" id="username" placeholder="Username" autocomplete="username">
+            <input type="password" id="password" placeholder="Password" autocomplete="current-password">
             <button class="btn btn-large" onclick="checkAuth()">Sign In</button>
             <p id="errMsg" style="color: red; font-size: 12px; margin-top: 15px; display: none;">Invalid Credentials</p>
         </div>
     </div>
 
     <div class="sidebar">
-        <h2 style="color:white; margin-bottom: 5px;">⚡ TITAN ATS</h2>
+        <h2 id="brandName" style="color:white; margin-bottom: 5px;">⚡ TITAN ATS</h2>
         <p style="color:#64748b; font-size: 12px; margin-top:0; margin-bottom:40px;">Enterprise Recruitment</p>
         
         <div id="nav-pipeline" class="nav-btn active" onclick="switchView('pipeline')">📊 Talent Pipeline</div>
         <div id="nav-analytics" class="nav-btn" onclick="switchView('analytics')">📈 Analytics</div>
         <div id="nav-logs" class="nav-btn" onclick="switchView('logs')">📜 Audit Logs</div>
         <div id="nav-comms" class="nav-btn" onclick="switchView('comms')">📧 Comms Dashboard</div>
+        <div id="nav-roles" class="nav-btn" onclick="switchView('roles')">🧩 Job Roles</div>
         
         <div style="flex:1;"></div>
         <div class="nav-btn" onclick="window.open('/careers', '_blank')">🔗 Public Job Board</div>
-        <div class="nav-btn" style="color: #ef4444;" onclick="location.reload()">🚪 Logout</div>
+        <div class="nav-btn" style="color: #ef4444;" onclick="logout()">🚪 Logout</div>
     </div>
 
     <div class="main">
@@ -92,7 +98,8 @@
                 <button class="btn btn-outline" onclick="exportToCSV()">📥 Export CSV</button>
             </div>
 
-            <div class="card" style="padding:0;">
+            <div class="notice">⚖️ Scores are advisory. A person must review every candidate before any hiring decision is made.</div>
+            <div class="card table-wrap" style="padding:0;">
                 <table id="mainTable">
                     <thead>
                         <tr>
@@ -125,6 +132,20 @@
                     <thead><tr><th>Timestamp</th><th>System Event</th></tr></thead>
                     <tbody id="logsBody"></tbody>
                 </table>
+            </div>
+        </div>
+
+        <div id="view-roles" class="view-section">
+            <h2 style="margin-top:0; color:#0f172a;">Job Roles</h2>
+            <div class="notice">Candidates are scored against the role description. Name the skills you require in plain words (e.g. "Python, SQL, Docker") - they are detected automatically.</div>
+            <div class="card form-row">
+                <h3 style="margin-top:0;">Add a role</h3>
+                <input type="text" id="newRoleTitle" maxlength="80" placeholder="Role title, e.g. Backend Engineer">
+                <textarea id="newRoleDesc" rows="4" maxlength="3000" placeholder="Describe the role and the skills required (at least 30 characters)"></textarea>
+                <button class="btn" onclick="addRole()">Add role</button>
+            </div>
+            <div class="card table-wrap" style="padding:0;">
+                <table><thead><tr><th>Role</th><th>Status</th><th>Action</th></tr></thead><tbody id="rolesBody"></tbody></table>
             </div>
         </div>
 
@@ -203,123 +224,195 @@
 
         <hr style="border:0; border-top:1px solid #e2e8f0; margin:30px 0;">
         <button class="btn btn-outline" style="width: 100%; margin-top: 10px;" onclick="closeDrawer()">Close Drawer</button>
+        <button class="btn btn-outline" style="width: 100%; margin-top: 10px; color:#dc2626; border-color:#dc2626;" onclick="deleteCandidate()">🗑 Permanently delete candidate data</button>
     </div>
 
     <script>
         let pData = [];
         let chartStatus = null;
         let chartRole = null;
-        window.currentCand = null; 
+        window.currentCand = null;
 
-        // LOGIN LOGIC - Loads global data instantly so Charts are never empty
+        // Escape anything that came from a candidate before putting it in innerHTML (prevents XSS)
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+        function showLogin() { document.getElementById('loginOverlay').style.display = 'flex'; }
+
+        // All HR calls go through here so an expired session sends the user back to the login screen
+        async function api(url, opts = {}) {
+            const res = await fetch(url, opts);
+            if (res.status === 401) { showLogin(); throw new Error('Session expired. Please sign in again.'); }
+            return res;
+        }
+
+        // LOGIN - verified by the server, no credentials stored in the page
         async function checkAuth() {
-            const u = document.getElementById('username').value.trim().toLowerCase();
-            const p = document.getElementById('password').value.trim();
-            if(u === "admin" && p === "admin123") {
+            const fd = new FormData();
+            fd.append('username', document.getElementById('username').value);
+            fd.append('password', document.getElementById('password').value);
+            const res = await fetch('/login', { method: 'POST', body: fd });
+            if (res.ok) {
+                document.getElementById('errMsg').style.display = 'none';
+                document.getElementById('password').value = '';
                 document.getElementById('loginOverlay').style.display = 'none';
-                await loadPipeline();
+                await bootstrap();
             } else {
+                document.getElementById('errMsg').textContent = res.status === 429 ? 'Too many attempts. Try again later.' : 'Invalid Credentials';
                 document.getElementById('errMsg').style.display = 'block';
             }
         }
-        document.getElementById('password').addEventListener('keypress', function (e) { if (e.key === 'Enter') checkAuth(); });
+        async function logout() { await fetch('/logout', { method: 'POST' }); location.reload(); }
+        ['username', 'password'].forEach(id => document.getElementById(id).addEventListener('keypress', e => { if (e.key === 'Enter') checkAuth(); }));
+
+        // Already signed in? skip the login screen
+        (async () => {
+            const r = await fetch('/api/me');
+            if (r.ok) { document.getElementById('loginOverlay').style.display = 'none'; await bootstrap(); }
+        })();
+
+        async function bootstrap() {
+            try { const cfg = await (await fetch('/api/public-config')).json(); document.getElementById('brandName').textContent = '⚡ ' + cfg.company + ' ATS'; } catch (e) {}
+            await loadRoleOptions();
+            await loadPipeline();
+        }
 
         // VIEW SWITCHER
         async function switchView(viewName) {
             document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('nav-' + viewName).classList.add('active');
-            
             document.querySelectorAll('.view-section').forEach(view => view.classList.remove('active'));
             document.getElementById('view-' + viewName).classList.add('active');
-            
-            if(viewName === 'pipeline') await loadPipeline();
-            if(viewName === 'analytics') { if(pData.length === 0) await loadPipeline(); renderCharts(); }
-            if(viewName === 'logs') await loadLogs();
-            if(viewName === 'comms') await loadComms();
+
+            if (viewName === 'pipeline') await loadPipeline();
+            if (viewName === 'analytics') await loadAnalytics();
+            if (viewName === 'logs') await loadLogs();
+            if (viewName === 'comms') await loadComms();
+            if (viewName === 'roles') await loadRoles();
         }
 
-        // FETCH DATA
+        // JOB ROLES
+        async function loadRoleOptions() {
+            const sel = document.getElementById('roleSelect'), keep = sel.value || 'All';
+            const roles = (await (await api('/api/roles/all')).json()).roles;
+            sel.innerHTML = '<option value="All">All Job Roles</option>' + roles.map(r => `<option value="${esc(r.title)}">${esc(r.title)}${r.active ? '' : ' (closed)'}</option>`).join('');
+            sel.value = [...sel.options].some(o => o.value === keep) ? keep : 'All';
+        }
+        async function loadRoles() {
+            const roles = (await (await api('/api/roles/all')).json()).roles;
+            document.getElementById('rolesBody').innerHTML = roles.map(r => `<tr><td><b>${esc(r.title)}</b><br><span style="font-size:11px;color:grey;">${esc(r.description.slice(0, 110))}${r.description.length > 110 ? '...' : ''}</span></td><td><span class="badge ${r.active ? 'b-green' : 'b-gray'}">${r.active ? 'Open' : 'Closed'}</span></td><td><button class="btn btn-outline" onclick="toggleRole(${r.id})">${r.active ? 'Close role' : 'Reopen'}</button></td></tr>`).join('');
+        }
+        async function addRole() {
+            const fd = new FormData();
+            fd.append('title', document.getElementById('newRoleTitle').value);
+            fd.append('description', document.getElementById('newRoleDesc').value);
+            try {
+                const res = await api('/api/roles', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Could not add role');
+                alert('✅ Role added. Skills detected: ' + (data.detected_skills.join(', ') || 'none - add skill names to the description'));
+                document.getElementById('newRoleTitle').value = ''; document.getElementById('newRoleDesc').value = '';
+                await loadRoles(); await loadRoleOptions();
+            } catch (err) { alert('❌ ' + err.message); }
+        }
+        async function toggleRole(id) {
+            await api(`/api/roles/${id}/toggle`, { method: 'POST' });
+            await loadRoles(); await loadRoleOptions();
+        }
+        async function deleteCandidate() {
+            const c = window.currentCand;
+            if (!c || !confirm(`Permanently delete ${c.candidate_name}'s application, resume and email history? This cannot be undone.`)) return;
+            const res = await api(`/api/candidates/${c.id}`, { method: 'DELETE' });
+            if (!res.ok) { alert('❌ Could not delete candidate.'); return; }
+            closeDrawer(); await loadPipeline();
+        }
+
+        // PIPELINE
         async function loadPipeline() {
             const role = document.getElementById('roleSelect').value;
-            const response = await fetch(`/api/pipeline?role=${encodeURIComponent(role)}`);
+            const response = await api(`/api/pipeline?role=${encodeURIComponent(role)}`);
             const data = await response.json();
-            pData = data.candidates; 
-            
-            const body = document.getElementById('pipeBody');
-            if (body) {
-                body.innerHTML = "";
-                if (pData.length === 0) {
-                    body.innerHTML = "<tr><td colspan='7' style='text-align:center;'>No applicants found.</td></tr>";
-                    return;
-                }
-                pData.forEach(c => {
-                    let aiBadge = c.status === "Shortlisted" ? "b-green" : (c.status === "Rejected" ? "b-red" : "b-yellow");
-                    let hrBadge = c.hr_decision === "Pending" ? "b-yellow" : (c.hr_decision.includes("Rejected") ? "b-red" : (c.hr_decision.includes("Hold") ? "b-yellow" : "b-green"));
-                    let missingDisplay = c.missing_skills ? c.missing_skills.split(",").slice(0,2).join(", ") + (c.missing_skills.split(",").length > 2 ? "..." : "") : "None";
+            pData = data.candidates;
 
-                    body.innerHTML += `
-                        <tr>
-                            <td><b>${c.candidate_name}</b><br><span style="font-size:11px; color:grey;">${c.candidate_email}</span></td>
-                            <td><span class="badge b-blue">${c.job_role}</span></td>
-                            <td><b style="color:var(--p); font-size:16px;">${c.final_score}%</b></td>
-                            <td style="color:#dc2626; font-size:12px; font-weight:bold;">${missingDisplay}</td>
-                            <td><span class="badge ${aiBadge}">${c.status}</span></td>
-                            <td><span class="badge ${hrBadge}">${c.hr_decision.split(" ")[0]}</span></td>
-                            <td><button class="btn btn-outline" onclick='openDrawer(${JSON.stringify(c)})'>Review</button></td>
-                        </tr>
-                    `;
-                });
+            const body = document.getElementById('pipeBody');
+            body.innerHTML = "";
+            if (pData.length === 0) {
+                body.innerHTML = "<tr><td colspan='7' style='text-align:center;'>No applicants found.</td></tr>";
+                return;
             }
+            body.innerHTML = pData.map((c, i) => {
+                const hr = c.hr_decision || "Pending";
+                const aiBadge = c.status === "Shortlisted" ? "b-green" : (c.status === "Rejected" ? "b-red" : "b-yellow");
+                const hrBadge = hr === "Pending" || hr.includes("Hold") ? "b-yellow" : (hr.includes("Rejected") ? "b-red" : "b-green");
+                const missing = c.missing_skills ? c.missing_skills.split(",").map(x => x.trim()) : [];
+                const missingDisplay = missing.length ? missing.slice(0, 2).join(", ") + (missing.length > 2 ? "..." : "") : "None";
+                return `
+                    <tr>
+                        <td><b>${esc(c.candidate_name)}</b><br><span style="font-size:11px; color:grey;">${esc(c.candidate_email)}</span></td>
+                        <td><span class="badge b-blue">${esc(c.job_role)}</span></td>
+                        <td><b style="color:var(--p); font-size:16px;">${esc(c.final_score)}%</b></td>
+                        <td style="color:#dc2626; font-size:12px; font-weight:bold;">${esc(missingDisplay)}</td>
+                        <td><span class="badge ${aiBadge}">${esc(c.status)}</span></td>
+                        <td><span class="badge ${hrBadge}">${esc(hr.split(" ")[0])}</span></td>
+                        <td><button class="btn btn-outline" onclick="openDrawer(${i})">Review</button></td>
+                    </tr>`;
+            }).join('');
+            filterTable();
         }
 
         // LIVE SEARCH
         function filterTable() {
-            let input = document.getElementById("searchInput").value.toUpperCase();
-            let tr = document.getElementById("mainTable").getElementsByTagName("tr");
-            for (let i = 1; i < tr.length; i++) {
-                let td = tr[i].getElementsByTagName("td")[0];
-                if (td) {
-                    let txtValue = td.textContent || td.innerText;
-                    tr[i].style.display = txtValue.toUpperCase().indexOf(input) > -1 ? "" : "none";
-                }
+            const input = document.getElementById("searchInput").value.toUpperCase();
+            const rows = document.getElementById("mainTable").getElementsByTagName("tr");
+            for (let i = 1; i < rows.length; i++) {
+                const td = rows[i].getElementsByTagName("td")[0];
+                if (td) rows[i].style.display = (td.textContent || "").toUpperCase().includes(input) ? "" : "none";
             }
         }
 
-        // CSV EXPORT
+        // CSV EXPORT (quoted; neutralises spreadsheet formula injection)
+        function csvCell(v) {
+            let t = String(v ?? '');
+            if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+            return '"' + t.replace(/"/g, '""') + '"';
+        }
         function exportToCSV() {
-            let csv = "Name,Email,Role,Match Score,Integrity Score,Final Score,AI Status,HR Decision\n";
-            pData.forEach(c => { csv += `${c.candidate_name},${c.candidate_email},${c.job_role},${c.job_match_score},${c.integrity_score},${c.final_score},${c.status},${c.hr_decision}\n`; });
-            let blob = new Blob([csv], { type: 'text/csv' });
-            let a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'Pipeline_Report.csv'; a.click();
+            const header = ["Name", "Email", "Role", "Match Score", "Integrity Score", "Final Score", "AI Status", "HR Decision"];
+            const lines = [header.map(csvCell).join(",")];
+            pData.forEach(c => lines.push([c.candidate_name, c.candidate_email, c.job_role, c.job_match_score, c.integrity_score, c.final_score, c.status, c.hr_decision].map(csvCell).join(",")));
+            const blob = new Blob([lines.join("\n")], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob); a.download = 'Pipeline_Report.csv'; a.click();
         }
 
         // LOGS & COMMS
         async function loadLogs() {
-            const res = await fetch('/api/logs'); const d = await res.json();
-            document.getElementById('logsBody').innerHTML = d.logs.map(l => `<tr><td><span class="badge b-gray">${l.timestamp}</span></td><td><b>${l.log_text}</b></td></tr>`).join('');
+            const d = await (await api('/api/logs')).json();
+            document.getElementById('logsBody').innerHTML = d.logs.map(l => `<tr><td><span class="badge b-gray">${esc(l.timestamp)}</span></td><td><b>${esc(l.log_text)}</b></td></tr>`).join('');
         }
-
         async function loadComms() {
-            const res = await fetch('/api/comms'); const d = await res.json();
-            document.getElementById('commsBody').innerHTML = d.comms.map(c => `<tr><td><span class="badge b-gray">${c.timestamp}</span></td><td><b>${c.candidate_name}</b><br><span style="font-size:11px; color:grey;">${c.candidate_email}</span></td><td><span class="badge b-blue">${c.role}</span></td><td><span class="badge ${c.decision.includes('Rejected') ? 'b-red' : (c.decision.includes('Hold') ? 'b-yellow' : 'b-green')}">${c.decision}</span></td></tr>`).join('');
+            const d = await (await api('/api/comms')).json();
+            document.getElementById('commsBody').innerHTML = d.comms.map(c => `<tr><td><span class="badge b-gray">${esc(c.timestamp)}</span></td><td><b>${esc(c.candidate_name)}</b><br><span style="font-size:11px; color:grey;">${esc(c.candidate_email)}</span></td><td><span class="badge b-blue">${esc(c.role)}</span></td><td><span class="badge ${c.decision.includes('Rejected') ? 'b-red' : (c.decision.includes('Hold') ? 'b-yellow' : 'b-green')}">${esc(c.decision)}</span></td></tr>`).join('');
         }
 
-        // CHARTS
-        function renderCharts() {
-            if(!pData.length) return;
-            const sC = {"Shortlisted":0, "Review Manually":0, "Rejected":0}, rC = {};
-            pData.forEach(c => { sC[c.status] = (sC[c.status] || 0) + 1; rC[c.job_role] = (rC[c.job_role] || 0) + 1; });
-            
-            if(chartStatus) chartStatus.destroy(); if(chartRole) chartRole.destroy();
-            
-            chartStatus = new Chart(document.getElementById('statusChart'), { type:'doughnut', data:{ labels:Object.keys(sC), datasets:[{data:Object.values(sC), backgroundColor:['#10b981','#f59e0b','#ef4444']}] }, options:{plugins:{title:{display:true, text:'AI Screening Decisions'}}} });
-            chartRole = new Chart(document.getElementById('roleChart'), { type:'bar', data:{ labels:Object.keys(rC), datasets:[{label:'Total Applications', data:Object.values(rC), backgroundColor:'#2563eb'}] }, options:{plugins:{title:{display:true, text:'Volume by Job Role'}}} });
+        // ANALYTICS - always uses ALL candidates, independent of the pipeline role filter
+        async function loadAnalytics() {
+            const d = await (await api('/api/pipeline?role=All')).json();
+            const all = d.candidates;
+            const sC = { "Shortlisted": 0, "Review Manually": 0, "Rejected": 0 }, rC = {};
+            all.forEach(c => { sC[c.status] = (sC[c.status] || 0) + 1; rC[c.job_role] = (rC[c.job_role] || 0) + 1; });
+
+            if (chartStatus) chartStatus.destroy();
+            if (chartRole) chartRole.destroy();
+            chartStatus = new Chart(document.getElementById('statusChart'), { type: 'doughnut', data: { labels: Object.keys(sC), datasets: [{ data: Object.values(sC), backgroundColor: ['#10b981', '#f59e0b', '#ef4444'] }] }, options: { plugins: { title: { display: true, text: 'AI Screening Decisions' } } } });
+            chartRole = new Chart(document.getElementById('roleChart'), { type: 'bar', data: { labels: Object.keys(rC), datasets: [{ label: 'Total Applications', data: Object.values(rC), backgroundColor: '#2563eb' }] }, options: { plugins: { title: { display: true, text: 'Volume by Job Role' } } } });
         }
 
         // REVIEW DRAWER
-        function openDrawer(c) {
-            window.currentCand = c; 
-            closeScheduler(); 
+        function openDrawer(i) {
+            const c = pData[i];
+            window.currentCand = c;
+            closeScheduler();
+            const hr = c.hr_decision || "Pending";
             document.getElementById('drawer').scrollTop = 0;
             document.getElementById('dName').innerText = c.candidate_name;
             document.getElementById('dEmail').innerText = c.candidate_email;
@@ -329,47 +422,53 @@
             document.getElementById('dExplanation').innerText = c.explanation;
             document.getElementById('dMatched').innerText = c.matched_skills || "None";
             document.getElementById('dMissing').innerText = c.missing_skills || "None";
-            document.getElementById('dPdfLink').href = `/preview/${c.resume_filename}`;
-            
-            const decisionBadge = document.getElementById('dCurrentDecision');
-            decisionBadge.innerText = c.hr_decision;
-            if(c.hr_decision.includes("Interview")) decisionBadge.className = "badge b-green";
-            else if (c.hr_decision === "Rejected") decisionBadge.className = "badge b-red";
-            else decisionBadge.className = "badge b-yellow";
+            document.getElementById('dPdfLink').href = `/preview/${encodeURIComponent(c.resume_filename)}`;
 
-            document.getElementById('dSuggestions').innerHTML = c.suggestions ? c.suggestions.split(";").map(note => note.trim() ? `<li>${note.trim()}</li>` : "").join("") : "<li>No suggestions</li>";
-            document.getElementById('dIntegrity').innerHTML = c.integrity_notes ? c.integrity_notes.split(";").map(note => note.trim() ? `<li>${note.trim()}</li>` : "").join("") : "<li>None</li>";
+            const badge = document.getElementById('dCurrentDecision');
+            badge.innerText = hr;
+            badge.className = hr.includes("Interview") ? "badge b-green" : (hr === "Rejected" ? "badge b-red" : "badge b-yellow");
+
+            const toList = (txt, empty) => txt ? txt.split(";").map(n => n.trim() ? `<li>${esc(n.trim())}</li>` : "").join("") : `<li>${empty}</li>`;
+            document.getElementById('dSuggestions').innerHTML = toList(c.suggestions, "No suggestions");
+            document.getElementById('dIntegrity').innerHTML = toList(c.integrity_notes, "None");
 
             document.getElementById('drawer').classList.add('active');
             document.getElementById('overlay').classList.add('active');
         }
-
         function closeDrawer() { document.getElementById('drawer').classList.remove('active'); document.getElementById('overlay').classList.remove('active'); }
-        function openScheduler() { document.getElementById('decisionBtns').style.display='none'; document.getElementById('interviewScheduler').style.display='block'; }
-        function closeScheduler() { document.getElementById('interviewScheduler').style.display='none'; document.getElementById('decisionBtns').style.display='flex'; document.getElementById('iTime').value=''; }
+        function openScheduler() {
+            const t = document.getElementById('iTime');
+            const n = new Date(); n.setMinutes(n.getMinutes() - n.getTimezoneOffset());
+            t.min = n.toISOString().slice(0, 16);          // can't pick a past slot
+            document.getElementById('decisionBtns').style.display = 'none';
+            document.getElementById('interviewScheduler').style.display = 'block';
+        }
+        function closeScheduler() { document.getElementById('interviewScheduler').style.display = 'none'; document.getElementById('decisionBtns').style.display = 'flex'; document.getElementById('iTime').value = ''; }
 
         // HR ACTIONS
         async function setDecision(decision, btn = null, time = "") {
-            if(btn) { btn.innerText = "Processing..."; btn.disabled = true; }
-
+            const original = btn ? btn.innerText : "";
+            if (btn) { btn.innerText = "Processing..."; btn.disabled = true; }
             const fd = new FormData();
             fd.append("candidate_id", window.currentCand.id);
             fd.append("decision", decision);
             fd.append("time", time);
-            fd.append("email", window.currentCand.candidate_email);
-            fd.append("name", window.currentCand.candidate_name);
-            fd.append("role", window.currentCand.job_role);
-            
-            await fetch('/update-decision', {method: 'POST', body: fd});
-            alert(`✅ Status Updated! An automated email has been dispatched to ${window.currentCand.candidate_email}.`);
-            
-            closeDrawer();
-            await loadPipeline();
+            try {
+                const res = await api('/update-decision', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Update failed");
+                alert(`✅ Status updated. An email to ${window.currentCand.candidate_email} has been queued - check Audit Logs for delivery status.`);
+                closeDrawer();
+                await loadPipeline();
+            } catch (err) {
+                alert("❌ " + err.message);
+            } finally {
+                if (btn) { btn.innerText = original; btn.disabled = false; }
+            }
         }
-
         async function confirmInterview(btn) {
             const time = document.getElementById('iTime').value;
-            if(!time) { alert("Please select a date and time!"); return; }
+            if (!time) { alert("Please select a date and time!"); return; }
             await setDecision('Interview Scheduled', btn, time);
         }
     </script>

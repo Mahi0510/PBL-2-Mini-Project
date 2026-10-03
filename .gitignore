@@ -1,0 +1,12 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+.vscode/
+node_modules/
+*.db
+*.db-journal
+uploads/*
+!uploads/.gitkeep

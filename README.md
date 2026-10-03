@@ -4,7 +4,7 @@
 
 TITAN ATS is an intelligent, end-to-end Applicant Tracking System (ATS) developed to optimize and modernize the recruitment lifecycle. By leveraging Natural Language Processing (NLP), Machine Learning (ML), and rule-based evaluation mechanisms, the system automates resume screening, evaluates candidate integrity, identifies skill gaps, and supports data-driven decision-making for Human Resource professionals.
 
-The platform significantly reduces manual effort, minimizes hiring bias, improves candidate shortlisting accuracy, and enhances the overall efficiency of the recruitment pipeline through intelligent automation and real-time analytics.
+The platform significantly reduces manual effort, applies the same screening criteria to every applicant, improves candidate shortlisting accuracy, and enhances the overall efficiency of the recruitment pipeline through intelligent automation and real-time analytics.
 
 ---
 
@@ -32,24 +32,23 @@ Utilizes SQLite as the primary relational database to maintain candidate screeni
 
 ### 6. Interactive HR Analytics Dashboard
 
-Provides administrators with real-time analytics, candidate filtering, interview scheduling, HR workflow management, and export functionality for reports in CSV and PDF formats.
+Provides administrators with real-time analytics, candidate filtering, interview scheduling, HR workflow management, and CSV export of the candidate pipeline.
 
 ---
 
 ## Technology Stack
 
-## Backend and AI Processing
+### Backend and AI Processing
 
 * **Programming Language:** Python 3
 * **Framework:** FastAPI
 * **Server:** Uvicorn
-* **Machine Learning / NLP:** Scikit-learn, spaCy
+* **Machine Learning / NLP:** Scikit-learn (TF-IDF, cosine similarity)
 * **Document Parsing:** PyMuPDF (`fitz`)
+* **Configuration:** python-dotenv (`.env`)
 * **Database:** SQLite3
 
----
-
-## Frontend and User Interface
+### Frontend and User Interface
 
 * **Structure:** HTML5
 * **Styling:** CSS3
@@ -58,147 +57,70 @@ Provides administrators with real-time analytics, candidate filtering, interview
 
 ---
 
-## Installation and Setup
+## Quick Start
 
-## 1. Prerequisites
+**With Docker (production):** see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Ensure the following software is installed on the local system:
-
-* Python 3.9 or above
-* Git
-* pip package manager
-
----
-
-## 2. Clone the Repository
+**Locally (development):**
 
 ```bash
 git clone https://github.com/Mahi0510/PBL-2-Mini-Project.git
 cd PBL-2-Mini-Project
-```
 
----
-
-## 3. Install Required Dependencies
-
-It is recommended to create and activate a virtual environment before installation.
-
-```bash
+python -m venv venv
+venv\Scripts\activate            # Windows   (macOS/Linux: source venv/bin/activate)
 pip install -r requirements.txt
+
+copy .env.example .env           # Windows   (macOS/Linux: cp .env.example .env)
+# edit .env: set ADMIN_PASSWORD, COMPANY_NAME and SMTP_* values
+
+python app/main.py               # or: uvicorn app.main:app --reload
 ```
+
+Open `http://127.0.0.1:8000` for the HR portal and `http://127.0.0.1:8000/careers` for the public application page. Log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env` (if the password is blank, a temporary one is printed in the console).
+
+Run the tests with `pip install -r requirements-dev.txt` then `python -m pytest`.
 
 ---
 
-## 4. Install NLP Language Model
+## How It Works
 
-Download the required English language model for spaCy:
+1. **Candidates apply** on `/careers`: pick an open role, upload PDF resume(s) and accept the privacy notice.
+2. **The system scores** each resume: *Job Match* (TF-IDF + cosine similarity against the role description), *Integrity* (contact details, sections, length, keyword-stuffing check), and a weighted *Final Score* (70% match, 30% integrity). Required skills found in the role description are listed as matched or missing.
+3. **HR reviews** in the dashboard and chooses **Interview Scheduled**, **Hold** or **Rejected**. An email goes to the candidate and the action is written to the audit log.
+4. **HR manages roles** (add, close, reopen), exports the pipeline to CSV, and can permanently delete any candidate's data.
 
-```bash
-python -m spacy download en_core_web_sm
-```
-
----
-
-## Usage Instructions
-
-## Starting the Backend Server
-
-Navigate to the project root directory and execute:
-
-```bash
-python app/main.py
-```
-
-This will launch the FastAPI backend server on:
-
-```text
-http://127.0.0.1:8000
-```
-
----
-
-## Accessing the HR Portal
-
-Open a web browser and navigate to:
-
-```text
-http://127.0.0.1:8000
-```
-
-Use the administrator login credentials:
-
-* **Username:** admin
-* **Password:** admin123
-
----
-
-## Operational Workflow
-
-### Step 1: Resume Screening
-
-Select the target job role or enter a custom job description and upload candidate PDF resumes in bulk.
-
-### Step 2: AI-Based Evaluation
-
-The system calculates:
-
-* Job Match Score
-* Integrity Score
-* Final Ranking Score
-* Missing Skills Analysis
-* Improvement Suggestions
-
-### Step 3: HR Decision Making
-
-HR can update candidate status as:
-
-* Selected
-* Hold
-* Rejected
-
-### Step 4: Interview Scheduling
-
-For shortlisted candidates, HR can schedule interviews by selecting date and time slots directly from the dashboard.
-
-### Step 5: Automated Communication
-
-System automatically generates and sends professional emails and HR letters based on candidate status.
+AI scores are advisory only; a human makes every decision. See [docs/COMPLIANCE.md](docs/COMPLIANCE.md).
 
 ---
 
 ## Project Structure
 
 ```text
-PBL-2-Mini-Project/
-│
 ├── app/
-│   │
-│   ├── main.py
-│   │   → Core FastAPI backend application
-│   │   → Resume parsing
-│   │   → ML ranking logic
-│   │   → Email automation
-│   │
+│   ├── main.py          FastAPI app: auth, API, email, retention
+│   ├── scoring.py       Resume scoring logic (unit-tested)
 │   └── static/
-│       │
-│       ├── index.html
-│       │   → Secure HR Dashboard Interface
-│       │
-│       └── careers.html
-│           → Public-facing Candidate Application Portal
-│
-├── uploads/
-│   → Temporary storage for uploaded resume PDFs
-│
-├── resume_screening.db
-│   → SQLite relational database
-│
-├── requirements.txt
-│   → Python package dependencies
-│
-└── README.md
-    → Project documentation
+│       ├── index.html   HR dashboard
+│       ├── careers.html Public application page
+│       └── vendor/      Chart.js (bundled, no CDN needed)
+├── tests/               Automated tests (pytest)
+├── docs/                DEPLOYMENT.md, COMPLIANCE.md
+├── Dockerfile, docker-compose.yml
+├── .env.example         Configuration template (copy to .env)
+├── requirements.txt, requirements-dev.txt
+└── .github/workflows/ci.yml
 ```
+
+`resume_screening.db` and `uploads/` are created at runtime and are git-ignored.
+
+---
+
+## Security Notes
+
+* Secrets live in `.env` (git-ignored); never hardcode them. If a password was ever committed, revoke it - deleting it from code does not remove it from Git history.
+* All HR pages/APIs require login; sessions are server-side and expire; logins and applications are rate-limited.
+* Candidate-supplied text is HTML-escaped; uploads are restricted to real PDFs under 5 MB; security headers are set on every response.
 
 ---
 

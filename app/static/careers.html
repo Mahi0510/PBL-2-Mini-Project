@@ -2,82 +2,100 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Careers | Join Our Team</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Careers</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); width: 450px; border-top: 6px solid #2563eb; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+        .card { background: white; padding: 36px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); width: 100%; max-width: 460px; border-top: 6px solid #2563eb; }
         h1 { margin-top: 0; color: #0f172a; text-align: center; }
-        p { color: #64748b; text-align: center; font-size: 14px; margin-bottom: 25px; }
+        .sub { color: #64748b; text-align: center; font-size: 14px; margin-bottom: 25px; }
         label { font-weight: bold; font-size: 13px; color: #334155; margin-top: 10px; display: block; }
-        input, select { width: 100%; padding: 12px; margin-top: 5px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; }
+        input[type=text], input[type=email], select, input[type=file] { width: 100%; padding: 12px; margin-top: 5px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        input[type=file] { background: #f1f5f9; padding: 18px; }
+        .hint { font-size: 11px; color: #64748b; margin: -8px 0 15px 0; }
+        .consent { display: flex; gap: 10px; align-items: flex-start; font-weight: normal; font-size: 12px; color: #475569; margin: 5px 0 18px; line-height: 1.5; }
+        .consent input { margin-top: 3px; }
         .btn { padding: 15px; border: none; border-radius: 8px; background: #2563eb; color: white; font-weight: bold; font-size: 16px; width: 100%; cursor: pointer; }
-        .btn:hover { background: #1d4ed8; }
+        .btn:hover { background: #1d4ed8; } .btn:disabled { background: #94a3b8; cursor: wait; }
         #msg { display: none; color: #059669; background: #d1fae5; padding: 15px; border-radius: 8px; font-weight: bold; text-align: center; margin-top: 15px; }
+        #error { display: none; color: #991b1b; background: #fee2e2; padding: 12px; border-radius: 8px; font-size: 13px; margin-bottom: 15px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>Join the Team</h1>
-        <p>Submit your application and resumes for instant AI screening.</p>
-        
-        <form id="applyForm" onsubmit="submitApp(event)">
-            <label>Full Name</label>
-            <input type="text" id="name" placeholder="E.g. Aryan Naik" required>
-            
-            <label>Email Address</label>
-            <input type="email" id="email" placeholder="aryan@example.com" required>
-            
-            <label>Target Role</label>
-            <select id="role">
-                <option value="Python Developer">Python Developer</option>
-                <option value="Data Analyst">Data Analyst</option>
-                <option value="Frontend Developer">Frontend Developer</option>
-                <option value="AI ML Intern">AI ML Intern</option>
-                <option value="Cybersecurity Intern">Cybersecurity Intern</option>
-            </select>
+        <h1 id="title">Join the Team</h1>
+        <div class="sub">Submit your application and resume (PDF) for review.</div>
 
-            <label>Upload Resumes (PDF Only, Bulk Upload Supported)</label>
-            <input type="file" id="resumes" accept=".pdf" multiple required style="background: #f1f5f9; padding: 20px;">
-            <p style="font-size: 11px; margin: 0 0 15px 0; text-align:left;">💡 Hold Ctrl (Windows) or Cmd (Mac) to select multiple files.</p>
-            
+        <form id="applyForm" onsubmit="submitApp(event)">
+            <div id="error" role="alert"></div>
+
+            <label for="name">Full Name</label>
+            <input type="text" id="name" maxlength="100" placeholder="E.g. Aryan Naik" required autocomplete="name">
+
+            <label for="email">Email Address</label>
+            <input type="email" id="email" maxlength="254" placeholder="aryan@example.com" required autocomplete="email">
+
+            <label for="role">Role</label>
+            <select id="role" required><option value="">Loading roles...</option></select>
+
+            <label for="resumes">Resume (PDF, max 5 MB each)</label>
+            <input type="file" id="resumes" accept=".pdf,application/pdf" multiple required>
+            <div class="hint">You can select more than one file.</div>
+
+            <label class="consent" for="consent">
+                <input type="checkbox" id="consent" required>
+                <span>I agree that <b id="companyName">the company</b> may store and process my application and resume to assess my suitability for this role. Software assists the screening, but a person makes every hiring decision. My data is deleted after <span id="retention">12 months</span>, or earlier if I ask.</span>
+            </label>
+
             <button type="submit" class="btn" id="subBtn">Submit Application</button>
         </form>
-        <div id="msg">🎉 Application Received! HR is reviewing your profile.</div>
+        <div id="msg">🎉 Application received! Our HR team will review your profile.</div>
     </div>
 
     <script>
+        const showError = m => { const e = document.getElementById('error'); e.textContent = m; e.style.display = 'block'; };
+
+        (async function init() {
+            try {
+                const cfg = await (await fetch('/api/public-config')).json();
+                document.getElementById('title').textContent = `Join ${cfg.company}`;
+                document.title = `Careers | ${cfg.company}`;
+                document.getElementById('companyName').textContent = cfg.company;
+                if (cfg.retention_days > 0) document.getElementById('retention').textContent = `${cfg.retention_days} days`;
+                else document.getElementById('retention').textContent = 'a period set by the company';
+                const roles = (await (await fetch('/api/roles')).json()).roles;
+                const sel = document.getElementById('role');
+                sel.innerHTML = roles.length ? '<option value="">Select a role...</option>' : '<option value="">No open roles right now</option>';
+                roles.forEach(r => { const o = document.createElement('option'); o.value = r; o.textContent = r; sel.appendChild(o); });
+            } catch (e) { showError('Could not load open roles. Please refresh the page.'); }
+        })();
+
         async function submitApp(e) {
             e.preventDefault();
+            document.getElementById('error').style.display = 'none';
             const btn = document.getElementById('subBtn');
-            btn.innerText = "Scanning & Analyzing...";
-            btn.disabled = true;
+            btn.textContent = 'Uploading & analysing...'; btn.disabled = true;
 
             const fd = new FormData();
-            fd.append("name", document.getElementById('name').value);
-            fd.append("email", document.getElementById('email').value);
-            fd.append("role", document.getElementById('role').value);
-
-            const fileInput = document.getElementById('resumes');
-            for (let i = 0; i < fileInput.files.length; i++) {
-                fd.append("resumes", fileInput.files[i]);
-            }
+            fd.append('name', document.getElementById('name').value);
+            fd.append('email', document.getElementById('email').value);
+            fd.append('role', document.getElementById('role').value);
+            fd.append('consent', document.getElementById('consent').checked ? 'true' : 'false');
+            for (const f of document.getElementById('resumes').files) fd.append('resumes', f);
 
             try {
-                const response = await fetch('/apply', {method:'POST', body:fd});
-                const data = await response.json();
-                if(response.ok && !data.error) {
+                const res = await fetch('/apply', { method: 'POST', body: fd });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && !data.error) {
                     document.getElementById('applyForm').style.display = 'none';
                     document.getElementById('msg').style.display = 'block';
-                } else {
-                    alert("Submission Error: " + (data.error || "Invalid file"));
-                    btn.innerText = "Submit Application";
-                    btn.disabled = false;
+                    return;
                 }
+                showError(data.error || data.detail || 'Submission failed. Please try again.');
             } catch (err) {
-                alert("Server error. Please ensure the backend is running.");
-                btn.innerText = "Submit Application";
-                btn.disabled = false;
+                showError('Network error. Please check your connection and try again.');
             }
+            btn.textContent = 'Submit Application'; btn.disabled = false;
         }
     </script>
 </body>

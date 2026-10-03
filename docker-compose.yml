@@ -1,0 +1,14 @@
+services:
+  titan-ats:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_PATH: /data/resume_screening.db
+      UPLOAD_DIR: /data/uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - titan-data:/data
+    restart: unless-stopped
+volumes:
+  titan-data:
